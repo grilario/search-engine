@@ -16,7 +16,7 @@ async fn main() -> Result<()> {
 
         let now = Instant::now();
 
-        let search_result = storage.search(query, 100);
+        let search_result = storage.search(query, 100).await?;
 
         println!("{:#?}", search_result);
 

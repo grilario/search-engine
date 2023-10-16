@@ -2,14 +2,14 @@ use std::fmt;
 
 use indexmap::IndexMap;
 use postcard::{from_bytes, to_allocvec};
-use rocksdb::{DBCompressionType, IteratorMode, Options, DB};
+use r2d2_sqlite::SqliteConnectionManager;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{cosine_similarity, tokenizer::Tokenizer, Result};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Document {
+    pub url: String,
     pub title: String,
     pub description: String,
     texts_tokenized: Vec<Vec<String>>,
@@ -27,26 +27,40 @@ impl fmt::Debug for Document {
 #[derive(Debug)]
 pub struct Storage {
     tokenizer: Tokenizer,
-    database: DB,
+    database: r2d2::Pool<SqliteConnectionManager>,
 }
 
 impl Storage {
     pub fn new() -> Result<Self> {
-        let path = "storage";
-        let mut opts = Options::default();
+        let tokenizer = Tokenizer {
+            split_tokens: vec!['-', '(', ')', '_', '.', ',', '/', '\\', '[', ']', '{', '}'],
+        };
+        let manager = SqliteConnectionManager::file("storage.db");
+        let pool = r2d2::Pool::new(manager)?;
 
-        opts.set_compression_type(DBCompressionType::Snappy);
-        opts.create_if_missing(true);
+        pool.get()?.execute(
+            "CREATE TABLE IF NOT EXISTS documents (
+                url TEXT PRIMARY KEY, 
+                title TEXT NOT NULL, 
+                description TEXT,
+                texts BLOB
+            )",
+            (),
+        )?;
 
         Ok(Storage {
-            tokenizer: Tokenizer {
-                split_tokens: vec!['-', '(', ')', '_', '.', ',', '/', '\\', '[', ']', '{', '}'],
-            },
-            database: DB::open(&opts, path)?,
+            tokenizer,
+            database: pool,
         })
     }
 
-    pub fn insert(&mut self, title: String, description: String, texts: Vec<String>) {
+    pub async fn insert(
+        &mut self,
+        url: String,
+        title: String,
+        description: String,
+        texts: Vec<String>,
+    ) -> anyhow::Result<()> {
         let mut texts_tokenized: Vec<Vec<String>> = Vec::new();
 
         for text in texts {
@@ -54,19 +68,19 @@ impl Storage {
             texts_tokenized.push(tokens);
         }
 
-        let document_as_bytes: Vec<u8> = to_allocvec(&Document {
-            title,
-            description,
-            texts_tokenized,
-        })
-        .unwrap();
+        let texts_as_bytes: Vec<u8> = to_allocvec(&texts_tokenized)?;
 
-        self.database
-            .put(Uuid::new_v4(), document_as_bytes)
-            .unwrap();
+        let conn = self.database.get()?;
+
+        conn.execute(
+            "INSERT INTO documents (url, title, description, texts) VALUES (?1, ?2, ?3, ?4)",
+            (&url, &title, &description, &texts_as_bytes),
+        )?;
+
+        Ok(())
     }
 
-    pub fn search(&self, query: String, limit: usize) -> Vec<Document> {
+    pub async fn search(&self, query: String, limit: usize) -> anyhow::Result<Vec<Document>> {
         #[derive(Debug)]
         struct SearchResult {
             document: Document,
@@ -77,8 +91,27 @@ impl Storage {
 
         let query = self.tokenizer.encode(&query);
 
-        'documents: for row in self.database.iterator(IteratorMode::Start) {
-            let document: Document = from_bytes(&row.unwrap().1).unwrap();
+        let conn = self.database.get()?;
+        let mut stmt = conn.prepare("SELECT url, title, description, texts FROM documents")?;
+        let rows = stmt.query_map([], |row| {
+            let texts_as_bytes: Vec<u8> = row.get(3)?;
+
+            Ok(Document {
+                url: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                texts_tokenized: from_bytes(&texts_as_bytes).map_err(|_| {
+                    rusqlite::Error::InvalidColumnType(
+                        3,
+                        "Vec".to_owned(),
+                        rusqlite::types::Type::Blob,
+                    )
+                })?,
+            })
+        })?;
+
+        'documents: for row in rows {
+            let document: Document = row?;
 
             for word in query.iter() {
                 for text in document.texts_tokenized.iter() {
@@ -140,11 +173,11 @@ impl Storage {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        results
+        Ok(results
             .iter()
             .take(limit)
             .map(|result| result.document.clone())
             .rev()
-            .collect()
+            .collect())
     }
 }
