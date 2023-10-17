@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
+askama = { version = "0.12.1", features = ["with-axum"], default-features = false }
+askama_axum = "0.3.0"
 axum = "0.6.20"
 indexmap = "2.0.2"
 postcard = { version = "1.0.8", default-features = false, features = ["alloc"] }
@@ -18,3 +20,4 @@ scraper = "0.17.1"
 serde = { version = "1.0.188", features = ["serde_derive", "derive"] }
 tokio = { version = "1.32.0", features = ["macros", "full"] }
 unidecode = "0.3.0"
+url = "2.4.1"

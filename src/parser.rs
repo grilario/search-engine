@@ -1,4 +1,5 @@
 use scraper::{element_ref::Text, Html, Selector};
+use url::Url;
 
 use crate::Result;
 
@@ -18,12 +19,18 @@ fn collect_text(texts: Text) -> String {
     result.trim().to_owned()
 }
 
-pub async fn parse_document(body: String) -> Result<(String, String, Vec<String>)> {
+pub async fn parse_document(url: String, body: String) -> Result<(String, String, Vec<String>)> {
     let document = Html::parse_document(&body);
+    let url = Url::parse(&url)?;
+
+    let content_selector = if url.domain().unwrap_or_default().contains("wikipedia.org") {
+        Selector::parse("#content .mw-parser-output")?
+    } else {
+        Selector::parse("body")?
+    };
 
     let title_selector = Selector::parse("title")?;
-    let content_selector = Selector::parse("#content .mw-parser-output")?; // main html in Wikipedia
-    let text_selector = Selector::parse("p,ul,ol")?;
+    let text_selector = Selector::parse("p, p ~ ul, p ~ ol")?;
 
     let title = match document.select(&title_selector).next() {
         Some(element) => element.text().collect::<Vec<_>>().join(""),

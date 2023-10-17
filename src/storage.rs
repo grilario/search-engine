@@ -5,7 +5,7 @@ use postcard::{from_bytes, to_allocvec};
 use r2d2_sqlite::SqliteConnectionManager;
 use serde::{Deserialize, Serialize};
 
-use crate::{cosine_similarity, tokenizer::Tokenizer, Result};
+use crate::{cosine_similarity, tokenizer::Tokenizer};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Document {
@@ -31,7 +31,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> anyhow::Result<Self> {
         let tokenizer = Tokenizer {
             split_tokens: vec!['-', '(', ')', '_', '.', ',', '/', '\\', '[', ']', '{', '}'],
         };
@@ -55,7 +55,7 @@ impl Storage {
     }
 
     pub async fn insert(
-        &mut self,
+        &self,
         url: String,
         title: String,
         description: String,

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title%}{{ title }} - Pesquisa{% endblock %}
+{% block header %}
+<form class="w-full p-4" action="/search" method="get">
+  <div class="relative">
+    <input name="q"
+      class="px-6 py-2 pl-12 w-full rounded-3xl outline-none border shadow focus:outline-blue-500 focus:border-transparent"
+      type="text" placeholder="Search" />
+    <div class="absolute inset-y-0 left-4 flex items-center">
+      <button type="submit">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="#000000" viewBox="0 0 256 256">
+          <path
+            d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z">
+          </path>
+        </svg>
+      </button>
+    </div>
+  </div>
+</form>
+{% endblock %}
+{% block content %}
+<ul class="w-full max-w-5xl mx-auto my-6 flex flex-col gap-6 px-6">
+  {% for document in results %}
+  <li>
+    <a class="group" href="{{ document.url }}">
+      <span class="font-medium text-sm">{{ document.url }}</span>
+      <h2 class="font-bold group-hover:underline">{{ document.title }}</h2>
+      <p class="text-sm">{{ document.description|truncate(360) }}</p>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

@@ -1,27 +1,15 @@
-use std::io;
+use std::sync::Arc;
 
-use search_engine::{storage::Storage, Result};
-use tokio::time::Instant;
+use search_engine::{server::make_routes, storage::Storage};
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    let ref storage = Storage::new()?;
+async fn main() -> anyhow::Result<()> {
+    let storage = Storage::new()?;
+    let state = Arc::new(storage);
 
-    let stdin = io::stdin();
-
-    loop {
-        let mut query = String::new();
-
-        stdin.read_line(&mut query)?;
-
-        let now = Instant::now();
-
-        let search_result = storage.search(query, 100).await?;
-
-        println!("{:#?}", search_result);
-
-        println!("ms:{}", now.elapsed().as_millis());
-    }
+    axum::Server::bind(&"0.0.0.0:3000".parse()?)
+        .serve(make_routes(state))
+        .await?;
 
     Ok(())
 }
